@@ -1,0 +1,4 @@
+dataclasses-json
+fastapi
+pydantic
+slowapi
