@@ -1,4 +1,5 @@
 dataclasses-json
 fastapi
+fastapi[standard]
 pydantic
 slowapi
