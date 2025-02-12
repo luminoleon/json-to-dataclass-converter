@@ -89,7 +89,7 @@ class DataClassGenerator:
                 ]
         self._inner_classes.append(inner_class)
 
-    def add_value(self, name, type_hint) -> None:
+    def add_variable(self, name, type_hint) -> None:
         name = DataClassGenerator.sanitize_value_name(name)
         if self._values:
             if name in [v.name for v in self._values]:
@@ -108,7 +108,7 @@ class DataClassGenerator:
                         class_name, self._use_dataclass_json
                     ).from_dict(value)
                 )
-                self.add_value(attribute_name, class_name)
+                self.add_variable(attribute_name, class_name)
             else:
                 attribute_name = NamingConverter.to_snake_case(key)
                 if isinstance(value, list):
@@ -122,7 +122,7 @@ class DataClassGenerator:
                                     class_name, self._use_dataclass_json
                                 ).from_dict(v)
                             )
-                self.add_value(
+                self.add_variable(
                     attribute_name,
                     DataClassGenerator.get_type_hint(key, value),
                 )
