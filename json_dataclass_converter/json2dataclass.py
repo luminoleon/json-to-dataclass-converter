@@ -58,7 +58,10 @@ class DataClassGenerator:
 
     @staticmethod
     def get_type_hint(key, value):
-        if isinstance(value, int):
+        print(key, value)
+        if isinstance(value, bool):
+            return "bool"
+        elif isinstance(value, int):
             return "int"
         elif isinstance(value, float):
             return "float"
