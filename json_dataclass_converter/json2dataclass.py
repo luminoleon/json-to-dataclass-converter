@@ -102,9 +102,9 @@ class DataClassGenerator:
         self._use_dataclass_json = use_dataclass_json
         self._typings = []
 
-    def __str__(self):
+    def __repr__(self):
         inner_classes_str = [
-            inner_class.__str__() for inner_class in self._inner_classes
+            inner_class.__repr__() for inner_class in self._inner_classes
         ]
         return (
             f"DataclassBuilder(name={self.name}, inner_classes=["
