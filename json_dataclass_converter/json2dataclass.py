@@ -1,24 +1,92 @@
 from dataclasses import dataclass
+from enum import Enum, auto
 import json
 import re
 
 
-class NamingConverter:
-    @staticmethod
-    def to_lower_camel_case(snake_str):
-        return (
-            snake_str[0] + NamingConverter.to_upper_camel_case(snake_str)[1:]
-        )
+class LetterCase(Enum):
+    CAMEL = auto()
+    SNAKE = auto()
+    PASCAL = auto()
+
+
+class Variable:
+    def __init__(self, name, type_hint=None):
+        self._name = Variable.sanitize_value_name(name)
+        self._type_hint = type_hint
+        self._letter_case = Variable._get_letter_case(self._name)
 
     @staticmethod
-    def to_upper_camel_case(snake_str):
-        return "".join(x.title() for x in snake_str.split("_"))
+    def _get_letter_case(name):
+        if re.match(r"^[a-z]+(?:[A-Z0-9_-][a-z0-9_-]+)*$", name):
+            return LetterCase.CAMEL
+        elif re.match(r"^[a-z0-9]+(?:_[a-z0-9]+)*$", name):
+            return LetterCase.SNAKE
+        elif re.match(r"^[A-Z][a-z0-9_-]+(?:[A-Z0-9_-][a-z0-9_-]+)*$", name):
+            return LetterCase.PASCAL
+        else:
+            raise ValueError("Invalid variable name")
+
+    @property
+    def letter_case(self):
+        if self._letter_case is not None:
+            return self._letter_case
+
+    @letter_case.setter
+    def letter_case(self, value):
+        if value not in LetterCase:
+            raise ValueError("Invalid letter case")
+        if self.letter_case == LetterCase.SNAKE:
+            if value == LetterCase.CAMEL:
+                self._name = re.sub(
+                    r"_(.)", lambda x: x.group(1).upper(), self._name
+                )
+            elif value == LetterCase.PASCAL:
+                self._name = re.sub(
+                    r"(?:^|_)(.)", lambda x: x.group(1).upper(), self._name
+                )
+        elif self.letter_case == LetterCase.CAMEL:
+            if value == LetterCase.SNAKE:
+                self._name = re.sub(
+                    r"([a-z0-9])([A-Z])", r"\1_\2", self._name
+                ).lower()
+            elif value == LetterCase.PASCAL:
+                self._name = self._name[0].upper() + self._name[1:]
+        elif self.letter_case == LetterCase.PASCAL:
+            if value == LetterCase.SNAKE:
+                self._name = re.sub(
+                    r"(?<!^)([A-Z])", r"_\1", self._name
+                ).lower()
+            elif value == LetterCase.CAMEL:
+                self._name = self._name[0].lower() + self._name[1:]
+        self._letter_case = value
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def type_hint(self):
+        return self._type_hint
 
     @staticmethod
-    def to_snake_case(camel_str):
-        return "".join(
-            ["_" + i.lower() if i.isupper() else i for i in camel_str]
-        ).lstrip("_")
+    def sanitize_value_name(name):
+        return re.sub(r"\W|^(?=\d)", "_", name)
+
+    def pascal_name(self):
+        self.letter_case = LetterCase.PASCAL
+        return self.name
+
+    def snake_name(self):
+        self.letter_case = LetterCase.SNAKE
+        return self.name
+
+    def camel_name(self):
+        self.letter_case = LetterCase.CAMEL
+        return self.name
+
+    def __repr__(self):
+        return f"Variable(name={self.name}, type_hint={self.type_hint}, letter_case={self.letter_case})"
 
 
 class DataClassGenerator:
@@ -28,8 +96,7 @@ class DataClassGenerator:
         type_hint: str
 
     def __init__(self, name="JsonClass", use_dataclass_json=False):
-        name = DataClassGenerator.sanitize_value_name(name)
-        self.name = name
+        self.name = Variable.sanitize_value_name(name)
         self._inner_classes = []
         self._values = []
         self._use_dataclass_json = use_dataclass_json
@@ -53,12 +120,7 @@ class DataClassGenerator:
         self._typings = value
 
     @staticmethod
-    def sanitize_value_name(name):
-        return re.sub(r"\W|^(?=\d)", "_", name)
-
-    @staticmethod
     def get_type_hint(key, value):
-        print(key, value)
         if isinstance(value, bool):
             return "bool"
         elif isinstance(value, int):
@@ -75,7 +137,7 @@ class DataClassGenerator:
                     types.append(type_hint)
             return f"List[{' | '.join(types)}]"
         elif isinstance(value, dict):
-            return NamingConverter.to_upper_camel_case(key)
+            return Variable(key).pascal_name()
         else:
             return "Any"
 
@@ -90,40 +152,38 @@ class DataClassGenerator:
         self._inner_classes.append(inner_class)
 
     def add_variable(self, name, type_hint) -> None:
-        name = DataClassGenerator.sanitize_value_name(name)
         if self._values:
             if name in [v.name for v in self._values]:
                 del self._values[[v.name for v in self._values].index(name)]
-        self._values.append(DataClassGenerator.Value(name, type_hint))
+        self._values.append(Variable(name, type_hint))
         if "[" in type_hint:
             self._typings.append(type_hint.split("[")[0])
 
     def from_dict(self, data):
         for key, value in data.items():
             if isinstance(value, dict):
-                class_name = NamingConverter.to_upper_camel_case(key)
-                attribute_name = NamingConverter.to_snake_case(key)
+                class_var = Variable(key)
                 self.add_inner_class(
                     DataClassGenerator(
-                        class_name, self._use_dataclass_json
+                        class_var.pascal_name(), self._use_dataclass_json
                     ).from_dict(value)
                 )
-                self.add_variable(attribute_name, class_name)
+                self.add_variable(
+                    class_var.snake_name(), class_var.pascal_name()
+                )
             else:
-                attribute_name = NamingConverter.to_snake_case(key)
+                attr_var = Variable(key)
                 if isinstance(value, list):
                     for v in value:
                         if isinstance(v, dict):
-                            class_name = NamingConverter.to_upper_camel_case(
-                                key
-                            )
                             self.add_inner_class(
                                 DataClassGenerator(
-                                    class_name, self._use_dataclass_json
+                                    attr_var.pascal_name(),
+                                    self._use_dataclass_json,
                                 ).from_dict(v)
                             )
                 self.add_variable(
-                    attribute_name,
+                    attr_var.snake_name(),
                     DataClassGenerator.get_type_hint(key, value),
                 )
         return self
