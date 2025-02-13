@@ -15,3 +15,10 @@ class Message(Enum):
 class Json2DataclassResponse:
     message: Message
     data: str
+
+
+@dataclass_json(letter_case=LetterCase.CAMEL)
+@dataclass
+class ErrorResponse:
+    message: Message
+    data: str

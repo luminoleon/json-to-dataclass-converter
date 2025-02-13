@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 
 from api.bodies import Json2DataclassBody
 from json_dataclass_converter import DataClassGenerator
-from api.responses import Json2DataclassResponse, Message
+from api.responses import ErrorResponse, Json2DataclassResponse, Message
 
 from contextlib import asynccontextmanager
 
@@ -46,15 +46,20 @@ def open_browser_if_desktop(url: str):
 @app.post("/json2dataclass")
 @limiter.limit("10/second")
 async def json2dataclass(request: Request, body: Json2DataclassBody):
-    if not body.class_name:
-        builder = DataClassGenerator(use_dataclass_json=True)
-    else:
-        builder = DataClassGenerator(body.class_name, use_dataclass_json=True)
-    builder.from_json(body.json_string)
-    return Json2DataclassResponse(
-        message=Message.SUCCESS,
-        data=builder.to_string(with_imports=body.with_imports),
-    )
+    try:
+        if not body.class_name:
+            builder = DataClassGenerator(use_dataclass_json=True)
+        else:
+            builder = DataClassGenerator(
+                body.class_name, use_dataclass_json=True
+            )
+        builder.from_json(body.json_string)
+        return Json2DataclassResponse(
+            message=Message.SUCCESS,
+            data=builder.to_string(with_imports=body.with_imports),
+        )
+    except Exception as e:
+        return ErrorResponse(message=Message.ERROR, data=str(e))
 
 
 @app.get("/", response_class=HTMLResponse)
