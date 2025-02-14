@@ -104,17 +104,13 @@ class Variable:
 
 
 class DataClassGenerator:
-    @dataclass
-    class Value:
-        name: str
-        type_hint: str
+    typings = set()
 
     def __init__(self, name="JsonClass", use_dataclass_json=False):
         self.name = Variable.sanitize_name(name)
         self._inner_classes = []
-        self._values = []
+        self._variables = []
         self._use_dataclass_json = use_dataclass_json
-        self._typings = []
 
     def __repr__(self):
         inner_classes_str = [
@@ -122,17 +118,8 @@ class DataClassGenerator:
         ]
         return (
             f"DataclassBuilder(name={self.name}, inner_classes=["
-            f"{', '.join(inner_classes_str)}], values={self._values})"
+            f"{', '.join(inner_classes_str)}], values={self._variables})"
         )
-
-    @property
-    def typings(self):
-        return self._typings
-
-    @typings.setter
-    def typings(self, value):
-        self._typings = value
-        self._typings = list(set(self._typings))
 
     @staticmethod
     def get_type_hint(key, value):
@@ -167,12 +154,14 @@ class DataClassGenerator:
         self._inner_classes.append(inner_class)
 
     def add_variable(self, name, type_hint) -> None:
-        if self._values:
-            if name in [v.name for v in self._values]:
-                del self._values[[v.name for v in self._values].index(name)]
-        self._values.append(Variable(name, type_hint))
+        if self._variables:
+            if name in [v.name for v in self._variables]:
+                del self._variables[
+                    [v.name for v in self._variables].index(name)
+                ]
+        self._variables.append(Variable(name, type_hint))
         if "[" in type_hint:
-            self._typings.append(type_hint.split("[")[0])
+            self.typings.add(type_hint.split("[")[0])
 
     def from_dict(self, data):
         for key, value in data.items():
@@ -206,7 +195,6 @@ class DataClassGenerator:
 
     def to_string(self, level=0, with_imports=False):
         indent_str = " " * 4 * level
-        typings = self.typings
         class_def_str = (
             f"\n{indent_str}@dataclass\n{indent_str}class {self.name}:"
         )
@@ -219,13 +207,9 @@ class DataClassGenerator:
             inner_class.to_string(level + 1)
             for inner_class in self._inner_classes
         ]
-        [
-            typings.extend(inner_class.typings)
-            for inner_class in self._inner_classes
-        ]
 
         value_strs = [
-            f"{indent_str}    {v.name}: {v.type_hint}" for v in self._values
+            f"{indent_str}    {v.name}: {v.type_hint}" for v in self._variables
         ]
 
         result_str = (
@@ -234,10 +218,10 @@ class DataClassGenerator:
         if level == 0:
             result_str = re.sub(r"\n{3,}", "\n\n", result_str)
             if with_imports:
-                if typings:
+                if self.typings:
                     with_imports_str = (
                         "from dataclasses import dataclass\n"
-                        f"from typing import {', '.join(typings)}\n\n"
+                        f"from typing import {', '.join(self.typings)}\n\n"
                         "from dataclasses_json import dataclass_json, LetterCase\n\n"
                     )
                 else:
