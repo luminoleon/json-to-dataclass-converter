@@ -29,13 +29,14 @@ class Variable:
     def _get_letter_case(name):
         name = re.sub(r"[^a-zA-Z0-9_-]", "", name)
         name = re.sub(r"^[^a-zA-Z]*", "", name)
-        if re.match(r"^[a-z]+(?:[A-Z0-9_-]+[a-z0-9_-]+)*$", name):
+        if re.match(r"^[a-z]+(?:[A-Z0-9_-]*[a-z0-9_-]*)*$", name):
             return LetterCase.CAMEL
         elif re.match(r"^[a-z]+(?:_[a-z0-9]+)*$", name):
             return LetterCase.SNAKE
-        elif re.match(r"^[A-Z]+[a-z0-9_-]+(?:[A-Z0-9_-]+[a-z0-9_-]+)*$", name):
+        elif re.match(r"^[A-Z]+(?:[A-Z0-9_-]*[a-z0-9_-]*)*$", name):
             return LetterCase.PASCAL
         else:
+            print(name)
             raise ValueError("Invalid variable name")
 
     @property
