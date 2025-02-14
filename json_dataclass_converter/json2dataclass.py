@@ -28,12 +28,13 @@ class Variable:
     @staticmethod
     def _get_letter_case(name):
         name = re.sub(r"[^a-zA-Z0-9_-]", "", name)
-        name = re.sub(r"^[^a-zA-Z]*", "", name)
-        if re.match(r"^[a-z]+(?:[A-Z0-9_-]*[a-z0-9_-]*)*$", name):
+        if re.match(r"^[_0-9-]+$", name):
             return LetterCase.CAMEL
-        elif re.match(r"^[a-z]+(?:_[a-z0-9]+)*$", name):
+        elif re.match(r"^[_0-9]*[a-z]+(?:[A-Z0-9_-]*[a-z0-9_-]*)*$", name):
+            return LetterCase.CAMEL
+        elif re.match(r"^[_0-9]*[a-z]+(?:_[a-z0-9]+)*$", name):
             return LetterCase.SNAKE
-        elif re.match(r"^[A-Z]+(?:[A-Z0-9_-]*[a-z0-9_-]*)*$", name):
+        elif re.match(r"^[_0-9]*[A-Z]+(?:[A-Z0-9_-]*[a-z0-9_-]*)*$", name):
             return LetterCase.PASCAL
         else:
             print(name)
@@ -168,6 +169,22 @@ class DataClassGenerator:
         if type_hint == "List":
             self.typings.add(type_hint)
 
+    def _handle_list_object_from_dict(self, name, values):
+        variable = Variable(name)
+        for value in values:
+            if isinstance(value, dict):
+                self.add_inner_class(
+                    DataClassGenerator(
+                        variable.pascal_name,
+                        self._use_dataclass_json,
+                    ).from_dict(value)
+                )
+            elif isinstance(value, list):
+                self._handle_list_object_from_dict(name, value)
+        self.add_variable(
+            variable.snake_name, DataClassGenerator.get_type_hint(name, values)
+        )
+
     def from_dict(self, data):
         for key, value in data.items():
             if isinstance(value, dict):
@@ -178,19 +195,11 @@ class DataClassGenerator:
                     ).from_dict(value)
                 )
                 self.add_variable(class_var.snake_name, class_var.pascal_name)
+            elif isinstance(value, list):
+                self._handle_list_object_from_dict(key, value)
             else:
-                attr_var = Variable(key)
-                if isinstance(value, list):
-                    for v in value:
-                        if isinstance(v, dict):
-                            self.add_inner_class(
-                                DataClassGenerator(
-                                    attr_var.pascal_name,
-                                    self._use_dataclass_json,
-                                ).from_dict(v)
-                            )
                 self.add_variable(
-                    attr_var.snake_name,
+                    Variable(key).snake_name,
                     DataClassGenerator.get_type_hint(key, value),
                 )
         return self
