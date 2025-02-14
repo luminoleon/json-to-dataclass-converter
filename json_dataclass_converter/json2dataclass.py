@@ -138,6 +138,8 @@ class DataClassGenerator:
                 type_hint = DataClassGenerator.get_type_hint(key, v)
                 if type_hint not in types:
                     types.append(type_hint)
+            if not types:
+                return "List"
             return f"List[{' | '.join(types)}]"
         elif isinstance(value, dict):
             return Variable(key).pascal_name
@@ -163,6 +165,8 @@ class DataClassGenerator:
         self._variables.append(Variable(name, type_hint))
         if "[" in type_hint:
             self.typings.add(type_hint.split("[")[0])
+        if type_hint == "List":
+            self.typings.add(type_hint)
 
     def from_dict(self, data):
         for key, value in data.items():
@@ -209,9 +213,13 @@ class DataClassGenerator:
             for inner_class in self._inner_classes
         ]
 
-        value_strs = [
-            f"{indent_str}    {v.name}: {v.type_hint}" for v in self._variables
-        ]
+        if self._variables:
+            value_strs = [
+                f"{indent_str}    {v.name}: {v.type_hint}"
+                for v in self._variables
+            ]
+        else:
+            value_strs = [f"{indent_str}    pass"]
 
         result_str = (
             "\n".join([class_def_str] + inner_class_strs + value_strs) + "\n"
