@@ -47,16 +47,13 @@ def open_browser_if_desktop(url: str):
 @limiter.limit("10/second")
 async def json2dataclass(request: Request, body: Json2DataclassBody):
     try:
-        if not body.class_name:
-            builder = DataClassGenerator(use_dataclass_json=True)
-        else:
-            builder = DataClassGenerator(
-                body.class_name, use_dataclass_json=True
-            )
-        builder.from_json(body.json_string)
+        generator = DataClassGenerator(
+            body.class_name, body.use_dataclass_json
+        )
+        generator.from_json(body.json_string)
         return Json2DataclassResponse(
             message=Message.SUCCESS,
-            data=builder.to_string(with_imports=body.with_imports),
+            data=generator.to_string(with_imports=body.with_imports),
         )
     except Exception as e:
         return ErrorResponse(message=Message.ERROR, data=str(e))
@@ -75,8 +72,10 @@ async def root():
         <form id="json2dataclass-form">
             <label for="withImports">With Imports:</label>
             <input type="checkbox" id="withImports" name="withImports" checked><br><br>
+            <label for="useDataclassJson">Add dataclass_json:</label>
+            <input type="checkbox" id="useDataclassJson" name="useDataclassJson" checked><br><br>
             <label for="className">Class Name:</label>
-            <input type="text" id="className" name="className"><br><br>
+            <input type="text" id="className" name="className" value="GeneratedClass"><br><br>
             <label for="jsonString">JSON String:</label><br>
             <textarea id="jsonString" name="jsonString" rows="10" cols="50"></textarea><br><br>
             <input type="button" value="Convert" onclick="convertJsonToDataclass()">
@@ -87,13 +86,15 @@ async def root():
                 const className = document.getElementById('className').value;
                 const jsonString = document.getElementById('jsonString').value;
                 const withImports = document.getElementById('withImports').checked;
+                const useDataclassJson = document.getElementById('useDataclassJson').checked;
                 const response = await fetch('/json2dataclass', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ className: className, jsonString: jsonString, withImports: withImports })
+                    body: JSON.stringify({ className: className, jsonString: jsonString, withImports: withImports, useDataclassJson: useDataclassJson })
                 });
+                console.log(JSON.stringify({ className: className, jsonString: jsonString, withImports: withImports, useDataclassJson: useDataclassJson }))
                 const result = await response.json();
                 document.getElementById('result').textContent = result.data;
             }
