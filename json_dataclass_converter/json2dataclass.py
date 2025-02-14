@@ -231,13 +231,11 @@ class DataClassGenerator:
                     with_imports_str = (
                         "from dataclasses import dataclass\n"
                         f"from typing import {', '.join(self.typings)}\n\n"
-                        "from dataclasses_json import dataclass_json, LetterCase\n\n"
                     )
                 else:
-                    with_imports_str = (
-                        "from dataclasses import dataclass\n\n"
-                        "from dataclasses_json import dataclass_json, LetterCase\n\n"
-                    )
+                    with_imports_str = "from dataclasses import dataclass\n\n"
+                if self._use_dataclass_json:
+                    with_imports_str += "from dataclasses_json import dataclass_json, LetterCase\n\n"
                 return with_imports_str + result_str
             else:
                 return result_str.lstrip("\n")
