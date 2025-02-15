@@ -47,13 +47,14 @@ def open_browser_if_desktop(url: str):
 @limiter.limit("10/second")
 async def json2dataclass(request: Request, body: Json2DataclassBody):
     try:
-        generator = DataClassGenerator(
-            body.class_name, body.use_dataclass_json
-        )
+        generator = DataClassGenerator(body.class_name)
         generator.from_json(body.json_string)
         return Json2DataclassResponse(
             message=Message.SUCCESS,
-            data=generator.to_string(with_imports=body.with_imports),
+            data=generator.to_string(
+                with_imports=body.with_imports,
+                use_dataclass_json=body.use_dataclass_json,
+            ),
         )
     except Exception as e:
         return ErrorResponse(message=Message.ERROR, data=str(e))
