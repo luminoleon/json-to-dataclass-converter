@@ -8,12 +8,30 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Deploy App via SSH
+      - name: Set repository name
+        id: set_repo_name
+        run: |
+          repo_name=$(basename $GITHUB_REPOSITORY)
+          echo "Repository name: $repo_name"
+          echo "::set-output name=repo_name::$repo_name"
+      - uses: actions/checkout@v4
+      - name: Upload app
+        uses: up9cloud/action-rsync@master
+        env:
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER: ${{ secrets.SERVER_USERNAME }}
+          KEY: ${{ secrets.SERVER_SSH_KEY }}
+          TARGET: /data/${{ steps.set_repo_name.outputs.repo_name }}
+          ARGS: -rvz --exclude=/.git/ --exclude=/.github/
+      - name: Start app
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          script: cd /data/json-to-dataclass-converter && git pull && docker compose up -d --build
+          script: |
+            set -e
+            DIRECTORY='/data/${{ steps.set_repo_name.outputs.repo_name }}'
+            cd $DIRECTORY
+            docker compose up -d --build
