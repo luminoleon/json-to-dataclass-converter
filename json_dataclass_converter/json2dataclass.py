@@ -1,3 +1,4 @@
+from collections import Counter
 from dataclasses import dataclass
 from enum import Enum, auto
 import json
@@ -12,6 +13,7 @@ class LetterCase(Enum):
 
 class Variable:
     def __init__(self, name, type_hint=None):
+        self._origional_name = name
         self._name = Variable.sanitize_name(name)
         self._type_hint = type_hint
         self._letter_case = Variable._get_letter_case(self._name)
@@ -30,6 +32,8 @@ class Variable:
         name = re.sub(r"[^a-zA-Z0-9_-]", "", name)
         if re.match(r"^[_0-9-]+$", name):
             return LetterCase.CAMEL
+        elif re.match(r"^[_0-9a-z]+$", name):
+            return LetterCase.SNAKE
         elif re.match(r"^[_0-9]*[a-z]+(?:[A-Z0-9_-]*[a-z0-9_-]*)*$", name):
             return LetterCase.CAMEL
         elif re.match(r"^[_0-9]*[a-z]+(?:_[a-z0-9]+)*$", name):
@@ -42,14 +46,7 @@ class Variable:
 
     @property
     def letter_case(self):
-        if self._letter_case is not None:
-            return self._letter_case
-
-    @letter_case.setter
-    def letter_case(self, value):
-        if value not in LetterCase:
-            raise ValueError("Invalid letter case")
-        self._letter_case = value
+        return self._letter_case
 
     @staticmethod
     def _convert_letter_case(name, src_letter_case, dest_letter_case):
@@ -78,6 +75,10 @@ class Variable:
         return name
 
     @property
+    def origional_name(self):
+        return self._origional_name
+
+    @property
     def name(self):
         return self._name
 
@@ -101,6 +102,14 @@ class Variable:
     def camel_name(self):
         return self._camel_name
 
+    def get_name(self, letter_case):
+        if letter_case is LetterCase.CAMEL:
+            return self.camel_name
+        elif letter_case is LetterCase.PASCAL:
+            return self.pascal_name
+        elif letter_case is LetterCase.SNAKE:
+            return self.snake_name
+
     def __repr__(self):
         return f"Variable(name={self.name!r}, type_hint={self.type_hint!r}, letter_case={self.letter_case})"
 
@@ -108,11 +117,20 @@ class Variable:
 class DataClassGenerator:
     typings = set()
 
-    def __init__(self, name="JsonClass", use_dataclass_json=False):
+    _dataclass_json_letter_case_map = {
+        LetterCase.CAMEL: "LetterCase.CAMEL",
+        LetterCase.PASCAL: "LetterCase.PASCAL",
+        LetterCase.SNAKE: "LetterCase.SNAKE",
+    }
+
+    def __init__(
+        self,
+        name="JsonClass",
+    ):
         self.name = Variable.sanitize_name(name)
         self._inner_classes = []
         self._variables = []
-        self._use_dataclass_json = use_dataclass_json
+        self._most_used_letter_case = LetterCase.CAMEL
 
     def __repr__(self):
         inner_classes_str = [
@@ -168,22 +186,22 @@ class DataClassGenerator:
             self.typings.add(type_hint.split("[")[0])
         if type_hint == "List":
             self.typings.add(type_hint)
+        letter_cases = [i.letter_case for i in self._variables]
+        counts = Counter(letter_cases)
+        self._most_used_letter_case = max(
+            counts, key=lambda x: (counts[x], -letter_cases.index(x))
+        )
 
     def _handle_list_object_from_dict(self, name, values):
         variable = Variable(name)
         for value in values:
             if isinstance(value, dict):
                 self.add_inner_class(
-                    DataClassGenerator(
-                        variable.pascal_name,
-                        self._use_dataclass_json,
-                    ).from_dict(value)
+                    DataClassGenerator(variable.pascal_name).from_dict(value)
                 )
             elif isinstance(value, list):
                 self._handle_list_object_from_dict(name, value)
-        self.add_variable(
-            variable.snake_name, DataClassGenerator.get_type_hint(name, values)
-        )
+        self.add_variable(name, DataClassGenerator.get_type_hint(name, values))
 
     def from_dict(self, data):
         if isinstance(data, dict):
@@ -191,18 +209,16 @@ class DataClassGenerator:
                 if isinstance(value, dict):
                     class_var = Variable(key)
                     self.add_inner_class(
-                        DataClassGenerator(
-                            class_var.pascal_name, self._use_dataclass_json
-                        ).from_dict(value)
+                        DataClassGenerator(class_var.pascal_name).from_dict(
+                            value
+                        )
                     )
-                    self.add_variable(
-                        class_var.snake_name, class_var.pascal_name
-                    )
+                    self.add_variable(key, class_var.pascal_name)
                 elif isinstance(value, list):
                     self._handle_list_object_from_dict(key, value)
                 else:
                     self.add_variable(
-                        Variable(key).snake_name,
+                        key,
                         DataClassGenerator.get_type_hint(key, value),
                     )
         elif isinstance(data, list):
@@ -212,26 +228,45 @@ class DataClassGenerator:
     def from_json(self, json_str):
         return self.from_dict(json.loads(json_str))
 
-    def to_string(self, level=0, with_imports=False):
+    def to_string(self, level=0, with_imports=False, use_dataclass_json=False):
         indent_str = " " * 4 * level
         class_def_str = (
             f"\n{indent_str}@dataclass\n{indent_str}class {self.name}:"
         )
-        if self._use_dataclass_json:
-            class_def_str = (
-                f"\n{indent_str}@dataclass_json(letter_case=LetterCase.CAMEL)"
-                + class_def_str
-            )
+        if use_dataclass_json:
+            if self._most_used_letter_case == LetterCase.SNAKE:
+                class_def_str = (
+                    f"\n{indent_str}@dataclass_json" + class_def_str
+                )
+            else:
+                class_def_str = (
+                    f"\n{indent_str}@dataclass_json(letter_case="
+                    f"{self._dataclass_json_letter_case_map[self._most_used_letter_case]})"
+                    + class_def_str
+                )
         inner_class_strs = [
-            inner_class.to_string(level + 1)
+            inner_class.to_string(
+                level + 1, use_dataclass_json=use_dataclass_json
+            )
             for inner_class in self._inner_classes
         ]
 
         if self._variables:
-            value_strs = [
-                f"{indent_str}    {v.name}: {v.type_hint}"
-                for v in self._variables
-            ]
+            value_strs = []
+            need_import_dataclass_field = False
+            for variable in self._variables:
+                if (
+                    Variable(variable.snake_name).get_name(
+                        self._most_used_letter_case
+                    )
+                    != variable.origional_name
+                ):
+                    field_str = f'field(metadata=config(field_name="{variable.origional_name}"))'
+                    value_str = f"{indent_str}    {variable.snake_name}: {variable.type_hint} = {field_str}"
+                    need_import_dataclass_field = True
+                else:
+                    value_str = f"{indent_str}    {variable.snake_name}: {variable.type_hint}"
+                value_strs.append(value_str)
         else:
             value_strs = [f"{indent_str}    pass"]
 
@@ -241,14 +276,16 @@ class DataClassGenerator:
         if level == 0:
             result_str = re.sub(r"\n{3,}", "\n\n", result_str)
             if with_imports:
+                with_imports_str = "from dataclasses import dataclass"
+                if need_import_dataclass_field:
+                    with_imports_str += ", field"
+                with_imports_str += "\n"
                 if self.typings:
-                    with_imports_str = (
-                        "from dataclasses import dataclass\n"
-                        f"from typing import {', '.join(self.typings)}\n\n"
+                    with_imports_str += (
+                        f"from typing import {', '.join(self.typings)}\n"
                     )
-                else:
-                    with_imports_str = "from dataclasses import dataclass\n\n"
-                if self._use_dataclass_json:
+                with_imports_str += "\n"
+                if use_dataclass_json:
                     with_imports_str += "from dataclasses_json import dataclass_json, LetterCase\n\n"
                 return with_imports_str + result_str
             else:
