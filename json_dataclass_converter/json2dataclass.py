@@ -186,22 +186,27 @@ class DataClassGenerator:
         )
 
     def from_dict(self, data):
-        for key, value in data.items():
-            if isinstance(value, dict):
-                class_var = Variable(key)
-                self.add_inner_class(
-                    DataClassGenerator(
-                        class_var.pascal_name, self._use_dataclass_json
-                    ).from_dict(value)
-                )
-                self.add_variable(class_var.snake_name, class_var.pascal_name)
-            elif isinstance(value, list):
-                self._handle_list_object_from_dict(key, value)
-            else:
-                self.add_variable(
-                    Variable(key).snake_name,
-                    DataClassGenerator.get_type_hint(key, value),
-                )
+        if isinstance(data, dict):
+            for key, value in data.items():
+                if isinstance(value, dict):
+                    class_var = Variable(key)
+                    self.add_inner_class(
+                        DataClassGenerator(
+                            class_var.pascal_name, self._use_dataclass_json
+                        ).from_dict(value)
+                    )
+                    self.add_variable(
+                        class_var.snake_name, class_var.pascal_name
+                    )
+                elif isinstance(value, list):
+                    self._handle_list_object_from_dict(key, value)
+                else:
+                    self.add_variable(
+                        Variable(key).snake_name,
+                        DataClassGenerator.get_type_hint(key, value),
+                    )
+        elif isinstance(data, list):
+            self._handle_list_object_from_dict("top", data)
         return self
 
     def from_json(self, json_str):
