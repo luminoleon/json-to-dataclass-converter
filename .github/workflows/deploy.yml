@@ -14,7 +14,7 @@ jobs:
         run: |
           repo_name=$(basename $GITHUB_REPOSITORY)
           echo "Repository name: $repo_name"
-          echo "::set-output name=repo_name::$repo_name"
+          echo "repo_name=$repo_name" >> $GITHUB_ENV
       - uses: actions/checkout@v4
       - name: Upload app
         uses: up9cloud/action-rsync@master
@@ -22,7 +22,7 @@ jobs:
           HOST: ${{ secrets.SERVER_HOST }}
           USER: ${{ secrets.SERVER_USERNAME }}
           KEY: ${{ secrets.SERVER_SSH_KEY }}
-          TARGET: /data/${{ steps.set_repo_name.outputs.repo_name }}
+          TARGET: /data/${{ env.repo_name }}
           ARGS: -rvz --exclude=/.git/ --exclude=/.github/
       - name: Start app
         uses: appleboy/ssh-action@v1.2.0
@@ -32,6 +32,6 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
             set -e
-            DIRECTORY='/data/${{ steps.set_repo_name.outputs.repo_name }}'
+            DIRECTORY='/data/${{ env.repo_name }}'
             cd $DIRECTORY
             docker compose up -d --build
