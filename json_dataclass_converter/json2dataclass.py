@@ -115,7 +115,6 @@ class Variable:
 
 
 class DataClassGenerator:
-    typings = set()
 
     _dataclass_json_letter_case_map = {
         LetterCase.CAMEL: "LetterCase.CAMEL",
@@ -130,7 +129,7 @@ class DataClassGenerator:
         self.name = Variable.sanitize_name(name)
         self._inner_classes = []
         self._variables = []
-        self._most_used_letter_case = LetterCase.CAMEL
+        self._typings = set()
 
     def __repr__(self):
         inner_classes_str = [
@@ -183,14 +182,17 @@ class DataClassGenerator:
                 ]
         self._variables.append(Variable(name, type_hint))
         if "[" in type_hint:
-            self.typings.add(type_hint.split("[")[0])
+            self._typings.add(type_hint.split("[")[0])
         if type_hint == "List":
-            self.typings.add(type_hint)
+            self._typings.add(type_hint)
+
+    @property
+    def _most_used_letter_case(self):
+        if not self._variables:
+            return LetterCase.SNAKE
         letter_cases = [i.letter_case for i in self._variables]
         counts = Counter(letter_cases)
-        self._most_used_letter_case = max(
-            counts, key=lambda x: (counts[x], -letter_cases.index(x))
-        )
+        return max(counts, key=lambda x: (counts[x], -letter_cases.index(x)))
 
     def _handle_list_object_from_dict(self, name, values):
         variable = Variable(name)
@@ -228,6 +230,48 @@ class DataClassGenerator:
     def from_json(self, json_str):
         return self.from_dict(json.loads(json_str))
 
+    @property
+    def typings(self):
+        all_typings = self._typings.copy()
+        for inner_class in self._inner_classes:
+            all_typings += inner_class._collect_all_typings()
+        return all_typings
+
+    @property
+    def import_dataclasses_field(self):
+        for variable in self._variables:
+            if (
+                Variable(variable.snake_name).get_name(
+                    self._most_used_letter_case
+                )
+                != variable.origional_name
+            ):
+                return True
+        for inner_class in self._inner_classes:
+            for variable in inner_class._variables:
+                if (
+                    Variable(variable.snake_name).get_name(
+                        self._most_used_letter_case
+                    )
+                    != variable.origional_name
+                ):
+                    return True
+        return False
+
+    @property
+    def import_dataclasses_json_lettercase(self):
+        if self._most_used_letter_case != LetterCase.SNAKE:
+            return True
+        else:
+            return False
+
+    @property
+    def import_dataclasses_json_lettercase(self):
+        if self._most_used_letter_case != LetterCase.SNAKE:
+            return True
+        else:
+            return False
+
     def to_string(self, level=0, with_imports=False, use_dataclass_json=False):
         indent_str = " " * 4 * level
         class_def_str = (
@@ -253,7 +297,6 @@ class DataClassGenerator:
 
         if self._variables:
             value_strs = []
-            need_import_dataclass_field = False
             for variable in self._variables:
                 if (
                     Variable(variable.snake_name).get_name(
@@ -263,7 +306,6 @@ class DataClassGenerator:
                 ):
                     field_str = f'field(metadata=config(field_name="{variable.origional_name}"))'
                     value_str = f"{indent_str}    {variable.snake_name}: {variable.type_hint} = {field_str}"
-                    need_import_dataclass_field = True
                 else:
                     value_str = f"{indent_str}    {variable.snake_name}: {variable.type_hint}"
                 value_strs.append(value_str)
@@ -277,7 +319,7 @@ class DataClassGenerator:
             result_str = re.sub(r"\n{3,}", "\n\n", result_str)
             if with_imports:
                 with_imports_str = "from dataclasses import dataclass"
-                if need_import_dataclass_field:
+                if self.import_dataclasses_field:
                     with_imports_str += ", field"
                 with_imports_str += "\n"
                 if self.typings:
@@ -286,7 +328,12 @@ class DataClassGenerator:
                     )
                 with_imports_str += "\n"
                 if use_dataclass_json:
-                    with_imports_str += "from dataclasses_json import dataclass_json, LetterCase\n\n"
+                    with_imports_str += (
+                        "from dataclasses_json import dataclass_json"
+                    )
+                    if self.import_dataclasses_json_lettercase:
+                        with_imports_str += ", LetterCase"
+                    with_imports_str += "\n\n"
                 return with_imports_str + result_str
             else:
                 return result_str.lstrip("\n")
