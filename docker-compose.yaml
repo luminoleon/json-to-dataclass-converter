@@ -4,3 +4,8 @@ services:
     restart: unless-stopped
     ports:
       - ${HOST:-127.0.0.1}:${PORT:-8000}:8000
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.json-to-dataclass-converter.rule=Host(`json2dataclass.luminoleon.top`)
+      - traefik.http.routers.json-to-dataclass-converter.entrypoints=websecure
+      - traefik.http.routers.json-to-dataclass-converter.tls.certresolver=zerossl
