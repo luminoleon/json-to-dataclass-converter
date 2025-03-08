@@ -234,7 +234,7 @@ class DataClassGenerator:
     def typings(self):
         all_typings = self._typings.copy()
         for inner_class in self._inner_classes:
-            all_typings += inner_class._collect_all_typings()
+            all_typings |= inner_class.typings
         return all_typings
 
     @property
